@@ -1,0 +1,63 @@
+name: PowerDefense temporary media
+run-name: pd-transfer ${{ inputs.mode }} ${{ inputs.batch_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        required: true
+        type: choice
+        options: [deploy, clear]
+      batch_id:
+        required: true
+        type: string
+      release_tag:
+        required: false
+        type: string
+      payload_sha256:
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: powerdefense-temporary-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build temporary site without media commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BATCH_ID: ${{ inputs.batch_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          PAYLOAD_SHA256: ${{ inputs.payload_sha256 }}
+          PAGES_BASE: https://${{ github.repository_owner }}.github.io/powerdefense-transfer/
+        run: python3 pages_worker.py "$MODE"
+        # Dispatch values are environment data, never interpolated shell code.
+        # MODE below is restricted to the workflow choice and Python argparse.
+        # GitHub merges step-level environment fields normally.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+          retention-days: 1
+    env:
+      MODE: ${{ inputs.mode }}
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
